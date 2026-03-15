@@ -1,3 +1,17 @@
+![alt text](image.png)
+
+![
+
+
+](image-1.png)
+
+![alt text](image-2.png)
+
+
+![alt text](image-3.png)
+
+
+![alt text](image-4.png)
 This is a project that is suppose to call the api at
 
 C:\Code\sindre-k8s\scripts\whisper\server.py
