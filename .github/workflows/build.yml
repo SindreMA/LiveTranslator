@@ -1,4 +1,4 @@
-name: Docker Build and Publish
+name: Build and Release
 
 on:
   push:
@@ -7,18 +7,11 @@ on:
       - main
   workflow_dispatch:
 
-env:
-  REGISTRY: registry.k8s.sindrema.com
-  IMAGE_NAME: images/livetranslator
-  K8S_REPO: SindreMA/sindre-k8s
-  K8S_DEPLOYMENT_PATH: manifests/useful-services/livetranslator-deployment.yaml
-
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      packages: write
 
     steps:
       - name: Checkout repository
@@ -45,69 +38,3 @@ jobs:
           name: Build ${{ steps.timestamp.outputs.tag }}
           files: livetranslator.exe
           make_latest: true
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Harbor Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ secrets.HARBOR_USERNAME }}
-          password: ${{ secrets.HARBOR_PASSWORD }}
-
-      - name: Extract metadata (tags, labels)
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=raw,value=${{ steps.timestamp.outputs.tag }}
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: ./Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
-          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-
-      - name: Checkout k8s manifests repository
-        uses: actions/checkout@v4
-        with:
-          repository: ${{ env.K8S_REPO }}
-          path: k8s-repo
-          token: ${{ secrets.GH_PAT }}
-
-      - name: Update Kubernetes deployment
-        run: |
-          IMAGE_TAG="${{ steps.timestamp.outputs.tag }}"
-          echo "Updating deployment to use image tag: ${IMAGE_TAG}"
-
-          sed -i "s|${REGISTRY}/${IMAGE_NAME}:.*|${REGISTRY}/${IMAGE_NAME}:${IMAGE_TAG}|g" \
-            "k8s-repo/${K8S_DEPLOYMENT_PATH}"
-
-          grep "${IMAGE_NAME}" "k8s-repo/${K8S_DEPLOYMENT_PATH}"
-        env:
-          REGISTRY: ${{ env.REGISTRY }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          K8S_DEPLOYMENT_PATH: ${{ env.K8S_DEPLOYMENT_PATH }}
-
-      - name: Commit and push deployment update
-        run: |
-          cd k8s-repo
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "${K8S_DEPLOYMENT_PATH}"
-
-          IMAGE_TAG="${{ steps.timestamp.outputs.tag }}"
-          git commit -m "Update livetranslator image to ${IMAGE_TAG}" || echo "No changes to commit"
-          git push
-        env:
-          K8S_DEPLOYMENT_PATH: ${{ env.K8S_DEPLOYMENT_PATH }}
